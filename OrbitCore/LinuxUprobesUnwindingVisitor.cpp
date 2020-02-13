@@ -8,6 +8,8 @@
 #include "OrbitProcess.h"
 #include "Path.h"
 
+#include "InstrumentationStopwatch.h"
+
 void UprobesTimerManager::ProcessUprobes(pid_t tid, uint64_t begin_timestamp,
                                          uint64_t function_address) {
   std::vector<Timer>& tid_timer_stack = tid_timer_stacks_[tid];
@@ -135,12 +137,16 @@ UprobesCallstackManager::ProcessUretprobesCallstack(
 }
 
 void LinuxUprobesUnwindingVisitor::visit(LinuxStackSampleEvent* event) {
+  gInstrumentationStopwatch.Stop(CATEGORY_TRACING).Start(CATEGORY_UNWINDING);
   const std::vector<unwindstack::FrameData>& callstack = unwinder_.Unwind(
       event->Registers(), event->StackDump(), event->StackSize());
+  gInstrumentationStopwatch.Stop(CATEGORY_UNWINDING).Start(CATEGORY_TRACING);
   const std::vector<unwindstack::FrameData>& full_callstack =
       callstack_manager_.ProcessSampledCallstack(event->TID(), callstack);
   if (!full_callstack.empty()) {
+  gInstrumentationStopwatch.Stop(CATEGORY_TRACING).Start(CATEGORY_HANDLE_CALLSTACK);
     HandleCallstack(event->TID(), event->Timestamp(), full_callstack);
+  gInstrumentationStopwatch.Stop(CATEGORY_HANDLE_CALLSTACK).Start(CATEGORY_TRACING);
   }
 }
 
@@ -148,8 +154,10 @@ void LinuxUprobesUnwindingVisitor::visit(LinuxUprobeEventWithStack* event) {
   timer_manager_.ProcessUprobes(event->TID(), event->Timestamp(),
                                 event->GetFunction()->GetVirtualAddress());
 
+  gInstrumentationStopwatch.Stop(CATEGORY_TRACING).Start(CATEGORY_UNWINDING);
   const std::vector<unwindstack::FrameData>& callstack = unwinder_.Unwind(
       event->Registers(), event->StackDump(), event->StackSize());
+  gInstrumentationStopwatch.Stop(CATEGORY_UNWINDING).Start(CATEGORY_TRACING);
   const std::vector<unwindstack::FrameData>& full_callstack =
       callstack_manager_.ProcessUprobesCallstack(event->TID(), callstack);
 
@@ -157,7 +165,9 @@ void LinuxUprobesUnwindingVisitor::visit(LinuxUprobeEventWithStack* event) {
   //  function could alter the statistics of time-based callstack sampling.
   //  Consider not/conditionally adding these callstacks to the trace.
   if (!full_callstack.empty()) {
+    gInstrumentationStopwatch.Stop(CATEGORY_TRACING).Start(CATEGORY_HANDLE_CALLSTACK);
     HandleCallstack(event->TID(), event->Timestamp(), full_callstack);
+    gInstrumentationStopwatch.Stop(CATEGORY_HANDLE_CALLSTACK).Start(CATEGORY_TRACING);
   }
 }
 
@@ -165,17 +175,23 @@ void LinuxUprobesUnwindingVisitor::visit(LinuxUretprobeEventWithStack* event) {
   Timer timer;
   if (timer_manager_.ProcessUretprobes(event->TID(), event->Timestamp(),
                                        &timer)) {
+    gInstrumentationStopwatch.Stop(CATEGORY_TRACING).Start(CATEGORY_HANDLE_TIMER);
     HandleTimer(timer);
+    gInstrumentationStopwatch.Stop(CATEGORY_HANDLE_TIMER).Start(CATEGORY_TRACING);
   }
 
+  gInstrumentationStopwatch.Stop(CATEGORY_TRACING).Start(CATEGORY_UNWINDING);
   const std::vector<unwindstack::FrameData>& callstack = unwinder_.Unwind(
       event->Registers(), event->StackDump(), event->StackSize());
+  gInstrumentationStopwatch.Stop(CATEGORY_UNWINDING).Start(CATEGORY_TRACING);
   const std::vector<unwindstack::FrameData>& full_callstack =
       callstack_manager_.ProcessUretprobesCallstack(event->TID(), callstack);
   // Remove this if we do not want a callstack at the return of an instrumented
   // function.
   if (!full_callstack.empty()) {
+    gInstrumentationStopwatch.Stop(CATEGORY_TRACING).Start(CATEGORY_HANDLE_CALLSTACK);
     HandleCallstack(event->TID(), event->Timestamp(), full_callstack);
+    gInstrumentationStopwatch.Stop(CATEGORY_HANDLE_CALLSTACK).Start(CATEGORY_TRACING);
   }
 }
 

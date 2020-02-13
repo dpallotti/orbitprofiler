@@ -157,6 +157,7 @@ else()
            LinuxPerfEventVisitor.h
            LinuxPerfRingBuffer.h
            LinuxPerfUtils.h
+          InstrumentationStopwatch.h
            LinuxUprobesUnwindingVisitor.h
            LinuxUtils.h)
 
@@ -170,6 +171,7 @@ else()
             LinuxPerfEventProcessor.cpp
             LinuxPerfRingBuffer.cpp
             LinuxPerfUtils.cpp
+          InstrumentationStopwatch.cpp
             LinuxUprobesUnwindingVisitor.cpp)
 endif()
 

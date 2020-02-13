@@ -13,6 +13,7 @@
 #include "Capture.h"
 #include "ContextSwitch.h"
 #include "CoreApp.h"
+#include "InstrumentationStopwatch.h"
 #include "LinuxPerfEvent.h"
 #include "LinuxPerfEventProcessor.h"
 #include "LinuxPerfRingBuffer.h"
@@ -108,6 +109,8 @@ void LinuxEventTracerThread::Run(
   uint64_t sample_count = 0;
   uint64_t uprobes_count = 0;
 
+  gInstrumentationStopwatch.Start(CATEGORY_TRACING);
+
   bool last_iteration_saw_events = false;
 
   while (!(*exit_requested)) {
@@ -116,7 +119,9 @@ void LinuxEventTracerThread::Run(
     // buffers and thus wasting cpu time. 10 ms are still small enough to
     // not have our buffers overflow and therefore lose events.
     if (!last_iteration_saw_events) {
+      gInstrumentationStopwatch.Stop(CATEGORY_TRACING).Start(CATEGORY_SLEEP);
       OrbitSleepMs(10);
+      gInstrumentationStopwatch.Stop(CATEGORY_SLEEP).Start(CATEGORY_TRACING);
     }
 
     last_iteration_saw_events = false;
@@ -171,7 +176,11 @@ void LinuxEventTracerThread::Run(
               context_switch.m_Time = event.Timestamp();
               context_switch.m_ProcessorIndex = event.CPU();
               context_switch.m_ProcessorNumber = event.CPU();
+              gInstrumentationStopwatch.Stop(CATEGORY_TRACING)
+                  .Start(CATEGORY_PROCESS_CONTEXT_SWITCH);
               GCoreApp->ProcessContextSwitch(context_switch);
+              gInstrumentationStopwatch.Stop(CATEGORY_PROCESS_CONTEXT_SWITCH)
+                  .Start(CATEGORY_TRACING);
             } else {
               ++Capture::GNumContextSwitches;
 
@@ -180,7 +189,11 @@ void LinuxEventTracerThread::Run(
               context_switch.m_Time = event.Timestamp();
               context_switch.m_ProcessorIndex = event.CPU();
               context_switch.m_ProcessorNumber = event.CPU();
+              gInstrumentationStopwatch.Stop(CATEGORY_TRACING)
+                  .Start(CATEGORY_PROCESS_CONTEXT_SWITCH);
               GCoreApp->ProcessContextSwitch(context_switch);
+              gInstrumentationStopwatch.Stop(CATEGORY_PROCESS_CONTEXT_SWITCH)
+                  .Start(CATEGORY_TRACING);
             }
 
             ++sched_switch_count;
@@ -199,7 +212,11 @@ void LinuxEventTracerThread::Run(
               context_switch.m_Time = event.Timestamp();
               context_switch.m_ProcessorIndex = event.CPU();
               context_switch.m_ProcessorNumber = event.CPU();
+              gInstrumentationStopwatch.Stop(CATEGORY_TRACING)
+                  .Start(CATEGORY_PROCESS_CONTEXT_SWITCH);
               GCoreApp->ProcessContextSwitch(context_switch);
+              gInstrumentationStopwatch.Stop(CATEGORY_PROCESS_CONTEXT_SWITCH)
+                  .Start(CATEGORY_TRACING);
             }
 
             // record start of excetion
@@ -211,7 +228,11 @@ void LinuxEventTracerThread::Run(
               context_switch.m_Time = event.Timestamp();
               context_switch.m_ProcessorIndex = event.CPU();
               context_switch.m_ProcessorNumber = event.CPU();
+              gInstrumentationStopwatch.Stop(CATEGORY_TRACING)
+                  .Start(CATEGORY_PROCESS_CONTEXT_SWITCH);
               GCoreApp->ProcessContextSwitch(context_switch);
+              gInstrumentationStopwatch.Stop(CATEGORY_PROCESS_CONTEXT_SWITCH)
+                  .Start(CATEGORY_TRACING);
             }
 
             ++sched_switch_count;
@@ -316,6 +337,21 @@ void LinuxEventTracerThread::Run(
           sample_count = 0;
           uprobes_count = 0;
           event_count_window_begin_ns = OrbitTicks(CLOCK_MONOTONIC);
+
+          PRINT("Instrumentation (last %lu s): ", EVENT_COUNT_WINDOW_S);
+          PRINT("%s: %.6f (%.1f%%); ", "TOTAL",
+                  gInstrumentationStopwatch.TotalS(),
+                  gInstrumentationStopwatch.TotalS() * 100.0 /
+                      EVENT_COUNT_WINDOW_S);
+          for (const auto& category : gInstrumentationStopwatch.Categories()) {
+            PRINT("%s: %.6f (%.1f%%); ", category.second.c_str(),
+                  gInstrumentationStopwatch.TotalS(category.first),
+                  gInstrumentationStopwatch.TotalS(category.first) * 100.0 /
+                      EVENT_COUNT_WINDOW_S);
+          }
+          PRINT("\n");
+          gInstrumentationStopwatch.Reset();
+          gInstrumentationStopwatch.Start(CATEGORY_TRACING);
         }
       }
     }
@@ -331,6 +367,8 @@ void LinuxEventTracerThread::Run(
   }
 
   uprobe_event_processor.ProcessAllEvents();
+
+  gInstrumentationStopwatch.StopAll();
 
   // Stop recording and close the file descriptors.
   for (auto& fd_to_ring_buffer : fds_to_ring_buffer) {
