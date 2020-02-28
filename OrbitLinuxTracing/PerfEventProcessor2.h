@@ -46,8 +46,8 @@ class PerfEventQueue {
         const std::pair<
             int, std::shared_ptr<std::queue<std::unique_ptr<PerfEvent>>>>&
             rhs) {
-      return lhs.second->front()->Timestamp() >
-             rhs.second->front()->Timestamp();
+      return lhs.second->front()->GetTimestamp() >
+             rhs.second->front()->GetTimestamp();
     }
   };
 
@@ -78,6 +78,12 @@ class PerfEventProcessor2 {
 
   explicit PerfEventProcessor2(std::unique_ptr<PerfEventVisitor> visitor)
       : visitor_(std::move(visitor)) {}
+
+  PerfEventProcessor2(const PerfEventProcessor2&) = delete;
+  PerfEventProcessor2& operator=(const PerfEventProcessor2&) = delete;
+
+  PerfEventProcessor2(PerfEventProcessor2&& o) = default;
+  PerfEventProcessor2& operator=(PerfEventProcessor2&& o) = default;
 
   void AddEvent(int origin_fd, std::unique_ptr<PerfEvent> event);
 

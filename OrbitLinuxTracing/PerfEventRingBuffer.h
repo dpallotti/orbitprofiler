@@ -4,12 +4,17 @@
 #include <linux/perf_event.h>
 
 #include <cassert>
+#include <cstdint>
+#include <cstdlib>
 
-#include "PerfEventUtils.h"
+#include "Logging.h"
+
+namespace LinuxTracing {
 
 class PerfEventRingBuffer {
  public:
-  explicit PerfEventRingBuffer(int perf_event_file_descriptor);
+  explicit PerfEventRingBuffer(int perf_event_fd, uint64_t size_kb);
+
   ~PerfEventRingBuffer();
 
   PerfEventRingBuffer(PerfEventRingBuffer&&) noexcept;
@@ -18,49 +23,60 @@ class PerfEventRingBuffer {
   PerfEventRingBuffer(const PerfEventRingBuffer&) = delete;
   PerfEventRingBuffer& operator=(const PerfEventRingBuffer&) = delete;
 
+  bool IsOpen() const { return ring_buffer_ != nullptr; }
+
   bool HasNewData();
-  void ReadHeader(perf_event_header* header);
-  void SkipRecord(const perf_event_header& header);
 
-  template <typename LinuxPerfEvent>
-  LinuxPerfEvent ConsumeRecord(const perf_event_header& header) {
-    LinuxPerfEvent record;
+  perf_event_header ReadHeader();
 
-    // perf_event_header::size contains the size of the entire record.
-    // This must be the same as the size of the ring_buffer_data field,
-    // in which we want to copy the data.
-    // If the sizes are not the same, the memory layout defined in
-    // PerfEvent.h does not match the one found in the ring buffer.
-    assert(sizeof(record.ring_buffer_data) == header.size &&
-           "Incorrect layout of the perf ring buffer data.");
+  void SkipRecordGivenHeader(const perf_event_header& header);
 
-    // Copy the data from the ringbuffer into the placeholer in that class.
-    auto* dest = reinterpret_cast<uint8_t*>(&record.ring_buffer_data);
-    Read(dest, header.size);
+  void SkipRecord();
 
-    SkipRecord(header);
-
+  template <typename RecordT>
+  RecordT ConsumeRecordGivenHeader(const perf_event_header& header) {
+    RecordT record;
+    if (sizeof(record) != header.size) {
+      // The type of the record being read must be equal to
+      // perf_event_header::size, which contains the size of the entire record.
+      FATAL("Incorrect memory layout of record read from the ring buffer");
+    }
+    ReadAtTail(reinterpret_cast<uint8_t*>(&record), header.size);
+    SkipRecordGivenHeader(header);
     return record;
   }
 
- private:
-  const size_t RING_BUFFER_PAGE_COUNT = 2048;  // 64: 256 KB; 2048: 8 MB
-  const size_t PAGE_SIZE = getpagesize();      // 4 KB
-  // "The mmap size should be 1+2^n pages, where the first page is a meta‐
-  // data page (struct perf_event_mmap_page) that contains various bits of
-  // information such as where the ring-buffer head is."
-  // http://man7.org/linux/man-pages/man2/perf_event_open.2.html
-  const size_t MMAP_LENGTH = (1 + RING_BUFFER_PAGE_COUNT) * PAGE_SIZE;
+  template <typename RecordT>
+  RecordT ConsumeRecord() {
+    return ConsumeRecordGivenHeader<RecordT>(ReadHeader());
+  }
 
-  perf_event_mmap_page* metadata_ = nullptr;
+  template <typename T>
+  T ReadValueAtOffset(uint64_t offset_from_tail) {
+    T value;
+    ReadAtOffsetFromTail(reinterpret_cast<uint8_t*>(&value), offset_from_tail,
+                         sizeof(value));
+    return value;
+  }
+
+  void ReadRawAtOffset(void* dest, uint64_t offset_from_tail, uint64_t count) {
+    ReadAtOffsetFromTail(static_cast<uint8_t*>(dest), offset_from_tail, count);
+  }
+
+ private:
+  uint64_t mmap_length_ = 0;
+  perf_event_mmap_page* metadata_page_ = nullptr;
   char* ring_buffer_ = nullptr;
   uint64_t ring_buffer_size_ = 0;
-  // the buffer length must be a power of 2, so we can do shifting for division.
-  uint32_t ring_buffer_size_exponent_ = 0;
+  // The buffer length needs to be a power of 2, hence we can use shifting for
+  // division.
+  uint32_t ring_buffer_size_log2_ = 0;
 
-  void Read(uint8_t* destination, uint64_t count);
-
-  void* mmap_mapping(int32_t file_descriptor);
+  void ReadAtTail(uint8_t* dest, uint64_t count);
+  void ReadAtOffsetFromTail(uint8_t* dest, uint64_t offset_from_tail,
+                            uint64_t count);
 };
+
+}  // namespace LinuxTracing
 
 #endif  // ORBIT_LINUX_TRACING_PERF_RING_BUFFER_H_

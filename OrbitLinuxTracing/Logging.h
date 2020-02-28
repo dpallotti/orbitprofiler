@@ -14,6 +14,13 @@
 
 #define ERROR(format, ...) LOG("Error: " format, ##__VA_ARGS__)
 
+#define FATAL(format, ...)                \
+  do {                                    \
+    LOG("FATAL: " format, ##__VA_ARGS__); \
+    __builtin_trap();                     \
+    __builtin_unreachable();              \
+  } while (0)
+
 #ifdef __clang__
 #pragma clang diagnostic pop
 #endif

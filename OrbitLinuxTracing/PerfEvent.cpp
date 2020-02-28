@@ -8,40 +8,42 @@ namespace LinuxTracing {
 // PerfEventVisitor needs to be an incomplete type to avoid the circular
 // dependency between PerfEvent.h and PerfEventVisitor.h.
 
-void LostPerfEvent::accept(PerfEventVisitor* visitor) { visitor->visit(this); }
-
-void ForkPerfEvent::accept(PerfEventVisitor* visitor) { visitor->visit(this); }
-
-void ExitPerfEvent::accept(PerfEventVisitor* visitor) { visitor->visit(this); }
-
-void ContextSwitchPerfEvent::accept(PerfEventVisitor* visitor) {
+void ContextSwitchPerfEvent::Accept(PerfEventVisitor* visitor) {
   visitor->visit(this);
 }
 
-void SystemWideContextSwitchPerfEvent::accept(PerfEventVisitor* visitor) {
+void SystemWideContextSwitchPerfEvent::Accept(PerfEventVisitor* visitor) {
   visitor->visit(this);
 }
 
-void StackSamplePerfEvent::accept(PerfEventVisitor* visitor) {
+void MmapPerfEvent::Accept(PerfEventVisitor* visitor) { visitor->visit(this); }
+
+void ForkPerfEvent::Accept(PerfEventVisitor* visitor) { visitor->visit(this); }
+
+void ExitPerfEvent::Accept(PerfEventVisitor* visitor) { visitor->visit(this); }
+
+void StackSamplePerfEvent::Accept(PerfEventVisitor* visitor) {
   visitor->visit(this);
 }
 
-void UprobePerfEvent::accept(PerfEventVisitor* visitor) {
+void UprobesPerfEvent::Accept(PerfEventVisitor* visitor) {
   visitor->visit(this);
 }
 
-void UprobePerfEventWithStack::accept(PerfEventVisitor* visitor) {
+void UprobesWithStackPerfEvent::Accept(PerfEventVisitor* visitor) {
   visitor->visit(this);
 }
 
-void UretprobePerfEvent::accept(PerfEventVisitor* visitor) {
+void UretprobesPerfEvent::Accept(PerfEventVisitor* visitor) {
   visitor->visit(this);
 }
 
-void UretprobePerfEventWithStack::accept(PerfEventVisitor* visitor) {
+void UretprobesWithStackPerfEvent::Accept(PerfEventVisitor* visitor) {
   visitor->visit(this);
 }
 
-void MapsPerfEvent::accept(PerfEventVisitor* visitor) { visitor->visit(this); }
+void LostPerfEvent::Accept(PerfEventVisitor* visitor) { visitor->visit(this); }
+
+void MapsPerfEvent::Accept(PerfEventVisitor* visitor) { visitor->visit(this); }
 
 }  // namespace LinuxTracing

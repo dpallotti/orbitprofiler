@@ -16,7 +16,7 @@ class TimestampReverseCompare {
  public:
   bool operator()(const std::unique_ptr<PerfEvent>& lhs,
                   const std::unique_ptr<PerfEvent>& rhs) {
-    return lhs->Timestamp() > rhs->Timestamp();
+    return lhs->GetTimestamp() > rhs->GetTimestamp();
   }
 };
 
@@ -38,6 +38,12 @@ class PerfEventProcessor {
 
   explicit PerfEventProcessor(std::unique_ptr<PerfEventVisitor> visitor)
       : visitor_(std::move(visitor)) {}
+
+  PerfEventProcessor(const PerfEventProcessor&) = delete;
+  PerfEventProcessor& operator=(const PerfEventProcessor&) = delete;
+
+  PerfEventProcessor(PerfEventProcessor&& o) = default;
+  PerfEventProcessor& operator=(PerfEventProcessor&& o) = default;
 
   void AddEvent(int origin_fd, std::unique_ptr<PerfEvent> event);
 
