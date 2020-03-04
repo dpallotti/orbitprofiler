@@ -27,7 +27,7 @@ void Tracer::Run(pid_t pid, uint64_t sampling_period_ns,
                  bool trace_callstacks, bool trace_instrumented_functions,
                  const std::shared_ptr<std::atomic<bool>>& exit_requested) {
   // Switch between TracerThread and TracerThread2 here.
-  TracerThread2 session{pid, sampling_period_ns, instrumented_functions};
+  TracerThread session{pid, sampling_period_ns, instrumented_functions};
   session.SetListener(listener);
   session.SetTraceContextSwitches(trace_context_switches);
   session.SetTraceCallstacks(trace_callstacks);

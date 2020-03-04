@@ -148,7 +148,7 @@ int32_t uretprobe_stack_event_open(const char* module, uint64_t function_offset,
 void* perf_event_open_mmap_ring_buffer(int fd, uint64_t mmap_length) {
   // The size of the ring buffer excluding the metadata page must be a power of
   // two number of pages.
-  static const int PAGE_SIZE = getpagesize();
+  static const auto PAGE_SIZE = static_cast<const uint64_t>(getpagesize());
   if (mmap_length < PAGE_SIZE ||
       __builtin_popcountl(mmap_length - PAGE_SIZE) != 1) {
     ERROR("mmap length for perf_event_open not 1+2^n pages: %lu", mmap_length);

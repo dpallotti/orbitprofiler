@@ -1,5 +1,7 @@
 #include "UprobesUnwindingVisitor.h"
 
+#include "InstrumentationStopwatch.h"
+
 namespace LinuxTracing {
 
 void UprobesFunctionCallManager::ProcessUprobes(pid_t tid,
@@ -135,8 +137,10 @@ UprobesCallstackManager::ProcessUretprobesCallstack(
 }
 
 void UprobesUnwindingVisitor::visit(StackSamplePerfEvent* event) {
+  gInstrumentationStopwatch.StopAllAndStart(CATEGORY_UNWINDING);
   const std::vector<unwindstack::FrameData>& callstack = unwinder_.Unwind(
       event->GetRegisters(), event->GetStackDump(), event->GetStackSize());
+  gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
   const std::vector<unwindstack::FrameData>& full_callstack =
       callstack_manager_.ProcessSampledCallstack(event->GetTid(), callstack);
   if (!full_callstack.empty()) {
@@ -145,7 +149,9 @@ void UprobesUnwindingVisitor::visit(StackSamplePerfEvent* event) {
           event->GetTid(),
           CallstackFramesFromLibunwindstackFrames(full_callstack),
           event->GetTimestamp()};
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
       listener_->OnCallstack(returned_callstack);
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
     }
   }
 }
@@ -155,8 +161,10 @@ void UprobesUnwindingVisitor::visit(UprobesWithStackPerfEvent* event) {
                                         event->GetFunction()->VirtualAddress(),
                                         event->GetTimestamp());
 
+  gInstrumentationStopwatch.StopAllAndStart(CATEGORY_UNWINDING);
   const std::vector<unwindstack::FrameData>& callstack = unwinder_.Unwind(
       event->GetRegisters(), event->GetStackDump(), event->GetStackSize());
+  gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
   const std::vector<unwindstack::FrameData>& full_callstack =
       callstack_manager_.ProcessUprobesCallstack(event->GetTid(), callstack);
 
@@ -165,11 +173,13 @@ void UprobesUnwindingVisitor::visit(UprobesWithStackPerfEvent* event) {
   //  Consider not/conditionally adding these callstacks to the trace.
   if (!full_callstack.empty()) {
     if (listener_ != nullptr) {
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
       Callstack returned_callstack{
           event->GetTid(),
           CallstackFramesFromLibunwindstackFrames(full_callstack),
           event->GetTimestamp()};
       listener_->OnCallstack(returned_callstack);
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
     }
   }
 }
@@ -180,7 +190,9 @@ void UprobesUnwindingVisitor::visit(UretprobesPerfEvent* event) {
                                                event->GetTimestamp());
   if (function_call.has_value()) {
     if (listener_ != nullptr) {
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
       listener_->OnFunctionCall(function_call.value());
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
     }
   }
 
@@ -193,12 +205,16 @@ void UprobesUnwindingVisitor::visit(UretprobesWithStackPerfEvent* event) {
                                                event->GetTimestamp());
   if (function_call.has_value()) {
     if (listener_ != nullptr) {
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
       listener_->OnFunctionCall(function_call.value());
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
     }
   }
 
+  gInstrumentationStopwatch.StopAllAndStart(CATEGORY_UNWINDING);
   const std::vector<unwindstack::FrameData>& callstack = unwinder_.Unwind(
       event->GetRegisters(), event->GetStackDump(), event->GetStackSize());
+  gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
   const std::vector<unwindstack::FrameData>& full_callstack =
       callstack_manager_.ProcessUretprobesCallstack(event->GetTid(), callstack);
   // Remove this if we do not want a callstack at the return of an instrumented
@@ -209,7 +225,9 @@ void UprobesUnwindingVisitor::visit(UretprobesWithStackPerfEvent* event) {
           event->GetTid(),
           CallstackFramesFromLibunwindstackFrames(full_callstack),
           event->GetTimestamp()};
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
       listener_->OnCallstack(returned_callstack);
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
     }
   }
 }

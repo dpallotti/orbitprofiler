@@ -21,6 +21,8 @@ target_sources(OrbitLinuxTracing PUBLIC
         include/OrbitLinuxTracing/TracerListener.h)
 
 target_sources(OrbitLinuxTracing PRIVATE
+        InstrumentationStopwatch.cpp
+        InstrumentationStopwatch.h
         LibunwindstackUnwinder.cpp
         LibunwindstackUnwinder.h
         Logging.h

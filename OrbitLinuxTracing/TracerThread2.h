@@ -92,7 +92,7 @@ class TracerThread2 : private PerfEventVisitor {
   std::unique_ptr<PerfEvent> current_event_ = nullptr;
 
   // Record and periodically print basic statistics on the number events.
-  static constexpr uint64_t EVENT_COUNT_WINDOW_S = 5;
+  static constexpr uint64_t EVENT_COUNT_WINDOW_S = 1;
   uint64_t event_count_window_begin_ns_ = 0;
   uint64_t context_switch_count_ = 0;
   uint64_t stack_sample_count_ = 0;

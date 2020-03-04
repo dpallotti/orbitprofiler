@@ -1,5 +1,6 @@
 #include "TracerThread2.h"
 
+#include "InstrumentationStopwatch.h"
 #include "PerfEventProcessor.h"
 #include "PerfEventProcessor2.h"
 #include "Utils.h"
@@ -35,6 +36,9 @@ void TracerThread2::Run(
   int64_t polling_sleep_us = POLLING_SLEEP_US_MIN;
   bool last_iteration_saw_events = false;
 
+  gInstrumentationStopwatch.Reset();
+  gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
+
   while (!(*exit_requested)) {
     // In order not to constantly poll the buffers, sleep if there was no new
     // event in the last iteration. Exponentially increase the sleeping time
@@ -46,7 +50,9 @@ void TracerThread2::Run(
     // TODO: This strategy might need more refinement, or a completely different
     //  strategy might be employed.
     if (!last_iteration_saw_events) {
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_SLEEP);
       usleep(polling_sleep_us);
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
       polling_sleep_us *= POLLING_SLEEP_FACTOR;
       if (polling_sleep_us > POLLING_SLEEP_US_MAX) {
         polling_sleep_us = POLLING_SLEEP_US_MAX;
@@ -78,10 +84,16 @@ void TracerThread2::Run(
       stack_sample_count_ = 0;
       uprobes_uretprobes_count_ = 0;
       event_count_window_begin_ns_ = timestamp_ns;
+
+      gInstrumentationStopwatch.StopAll();
+      gInstrumentationStopwatch.Print(actual_event_count_window_s);
+      gInstrumentationStopwatch.Reset();
     }
 
     uprobes_event_processor_->ProcessOldEvents();
   }
+
+  gInstrumentationStopwatch.StopAll();
 
   StopAndDestroySamplers();
 
@@ -222,10 +234,10 @@ void TracerThread2::StopAndDestroySamplers() {
 bool TracerThread2::PollAllSamplers() {
   // TODO: These values are arbitrary and can definitely use refinement.
   constexpr int32_t CONTEXT_SWITCH_POLLING_BATCH = 5;
-  constexpr int32_t MMAP_FORK_EXIT_POLLING_BATCH = 1;
-  constexpr int32_t STACK_POLLING_BATCH = 1;
-  constexpr int32_t UPROBES_POLLING_BATCH = 1;
-  constexpr int32_t URETPROBES_POLLING_BATCH = 1;
+  constexpr int32_t MMAP_FORK_EXIT_POLLING_BATCH = 5;
+  constexpr int32_t STACK_POLLING_BATCH = 5;
+  constexpr int32_t UPROBES_POLLING_BATCH = 5;
+  constexpr int32_t URETPROBES_POLLING_BATCH = 5;
 
   bool poll_saw_events = false;
 
@@ -301,7 +313,9 @@ void TracerThread2::visit(SystemWideContextSwitchPerfEvent* event) {
         static_cast<uint16_t>(context_switch.GetCpu()),
         context_switch.GetTimestamp()};
     if (listener_ != nullptr) {
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
       listener_->OnContextSwitchOut(context_switch_out);
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
     }
   }
 
@@ -311,7 +325,9 @@ void TracerThread2::visit(SystemWideContextSwitchPerfEvent* event) {
         static_cast<uint16_t>(context_switch.GetCpu()),
         context_switch.GetTimestamp()};
     if (listener_ != nullptr) {
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
       listener_->OnContextSwitchIn(context_switch_in);
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
     }
   }
 
@@ -330,7 +346,9 @@ void TracerThread2::visit(MmapPerfEvent* event) {
 
 void TracerThread2::visit(ForkPerfEvent* event) {
   if (listener_ != nullptr) {
+    gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
     listener_->OnTid(event->GetTid());
+    gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
   }
 
   current_event_ = nullptr;

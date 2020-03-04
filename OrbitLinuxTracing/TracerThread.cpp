@@ -1,5 +1,6 @@
 #include "TracerThread.h"
 
+#include "InstrumentationStopwatch.h"
 #include "Logging.h"
 #include "PerfEventOpen.h"
 #include "PerfEventProcessor.h"
@@ -9,11 +10,19 @@
 #include "Utils.h"
 #include "absl/container/flat_hash_map.h"
 
+#include <pthread.h>
+
 namespace LinuxTracing {
 
 // TODO: Refactor this huge method.
 void TracerThread::Run(
     const std::shared_ptr<std::atomic<bool>>& exit_requested) {
+  cpu_set_t cpu_set{};
+  CPU_SET(7, &cpu_set);
+  if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_set) != 0) {
+    fprintf(stderr, "pthread_setaffinity_np error: %s\n", strerror(errno));
+  }
+
   absl::flat_hash_map<int32_t, PerfEventRingBuffer> fds_to_ring_buffer;
   absl::flat_hash_map<pid_t, int32_t> threads_to_fd;
   absl::flat_hash_map<int32_t, const Function*> uprobe_fds_to_function;
@@ -90,11 +99,13 @@ void TracerThread::Run(
   }
 
   // Record and periodically print basic statistics on the number events.
-  constexpr uint64_t EVENT_COUNT_WINDOW_S = 5;
+  constexpr uint64_t EVENT_COUNT_WINDOW_S = 1;
   uint64_t event_count_window_begin_ns = 0;
   uint64_t sched_switch_count = 0;
   uint64_t sample_count = 0;
   uint64_t uprobes_count = 0;
+
+  gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
 
   bool last_iteration_saw_events = false;
 
@@ -104,7 +115,9 @@ void TracerThread::Run(
     // our buffers overflow and therefore lose events.
     // TODO: Refine this sleeping pattern, possibly using exponential backoff.
     if (!last_iteration_saw_events) {
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_SLEEP);
       usleep(10'000);
+      gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
     }
 
     last_iteration_saw_events = false;
@@ -157,14 +170,18 @@ void TracerThread::Run(
                   event.GetTid(), static_cast<uint16_t>(event.GetCpu()),
                   event.GetTimestamp()};
               if (listener_ != nullptr) {
+                gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
                 listener_->OnContextSwitchOut(context_switch_out);
+                gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
               }
             } else {
               ContextSwitchIn context_switch_in{
                   event.GetTid(), static_cast<uint16_t>(event.GetCpu()),
                   event.GetTimestamp()};
               if (listener_ != nullptr) {
+                gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
                 listener_->OnContextSwitchIn(context_switch_in);
+                gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
               }
             }
             ++sched_switch_count;
@@ -181,7 +198,9 @@ void TracerThread::Run(
                   event.GetPrevTid(), static_cast<uint16_t>(event.GetCpu()),
                   event.GetTimestamp()};
               if (listener_ != nullptr) {
+                gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
                 listener_->OnContextSwitchOut(context_switch_out);
+                gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
               }
             }
             if (event.GetNextTid() != 0) {
@@ -189,7 +208,9 @@ void TracerThread::Run(
                   event.GetNextTid(), static_cast<uint16_t>(event.GetCpu()),
                   event.GetTimestamp()};
               if (listener_ != nullptr) {
+                gInstrumentationStopwatch.StopAllAndStart(CATEGORY_LISTENER);
                 listener_->OnContextSwitchIn(context_switch_in);
+                gInstrumentationStopwatch.StopAllAndStart(CATEGORY_TRACING);
               }
             }
 
@@ -312,6 +333,10 @@ void TracerThread::Run(
           sample_count = 0;
           uprobes_count = 0;
           event_count_window_begin_ns = MonotonicTimestampNs();
+
+          gInstrumentationStopwatch.StopAll();
+          gInstrumentationStopwatch.Print(EVENT_COUNT_WINDOW_S);
+          gInstrumentationStopwatch.Reset();
         }
       }
     }
@@ -327,6 +352,8 @@ void TracerThread::Run(
   }
 
   uprobes_event_processor.ProcessAllEvents();
+
+  gInstrumentationStopwatch.StopAll();
 
   // Stop recording and close the file descriptors.
   for (auto& fd_to_ring_buffer : fds_to_ring_buffer) {
