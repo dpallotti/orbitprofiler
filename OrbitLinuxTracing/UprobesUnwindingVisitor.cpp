@@ -112,6 +112,58 @@ void UprobesUnwindingVisitor::visit(CallchainSamplePerfEvent* event) {
   listener_->OnCallstackSample(std::move(sample));
 }
 
+// TODO: Copy-pasted from UprobesUnwindingVisitor::visit(CallchainSamplePerfEvent* event)
+void UprobesUnwindingVisitor::visit(CallchainSchedSwitchPerfEvent* event) {
+  CHECK(listener_ != nullptr);
+
+  if (current_maps_ == nullptr) {
+    return;
+  }
+
+  if (!return_address_manager_.PatchCallchain(event->GetTid(), event->GetCallchain(),
+                                              event->GetCallchainSize(), current_maps_.get())) {
+    return;
+  }
+
+  // The top of a callchain is always inside the kernel code.
+  if (event->GetCallchainSize() <= 1) {
+    return;
+  }
+
+  uint64_t top_ip = event->GetCallchain()[1];
+  unwindstack::MapInfo* top_ip_map_info = current_maps_->Find(top_ip);
+
+  // Some samples can actually fall inside u(ret)probes code. Discard them,
+  // as we don't want to show the unnamed uprobes module in the samples.
+  if (top_ip_map_info == nullptr || top_ip_map_info->name == "[uprobes]") {
+    if (discarded_samples_in_uretprobes_counter_ != nullptr) {
+      ++(*discarded_samples_in_uretprobes_counter_);
+    }
+    return;
+  }
+
+  CallstackSample sample;
+  sample.set_tid(event->GetTid());
+  sample.set_timestamp_ns(event->GetTimestamp());
+
+  Callstack* callstack = sample.mutable_callstack();
+  uint64_t* raw_callchain = event->GetCallchain();
+  // Skip the first frame as the top of a perf_event_open callchain is always
+  // inside kernel code.
+  callstack->add_pcs(raw_callchain[1]);
+  // Only the address of the top of the stack is correct. Frame-based unwinding
+  // uses the return address of a function call as the caller's address.
+  // However, the actual address of the call instruction is before that.
+  // As we don't know the size of the call instruction, we subtract 1 from the
+  // return address. This way we fall into the range of the call instruction.
+  // Note: This is also done the same way in Libunwindstack.
+  for (uint64_t frame_index = 2; frame_index < event->GetCallchainSize(); ++frame_index) {
+    callstack->add_pcs(raw_callchain[frame_index] - 1);
+  }
+
+  listener_->OnCallstackSample(std::move(sample));
+}
+
 void UprobesUnwindingVisitor::visit(UprobesPerfEvent* event) {
   CHECK(listener_ != nullptr);
 

@@ -901,17 +901,8 @@ void TracerThread::ProcessSampleEvent(const perf_event_header& header,
     auto event =
         ConsumeCallchainTracepointPerfEvent<CallchainSchedSwitchPerfEvent>(ring_buffer, header);
     if (event->GetPid() == pid_) {
-      LOG("sched_switch :: header.size: %d; timestamp: %lu, pid: %d, tid: %d, cpu: %u; "
-          "callchain_size: %lu; tracepoint_size: %d, prev_comm: %s, prev_pid: %d, next_comm: %s, "
-          "next_pid: %d; ",
-          header.size, event->GetTimestamp(), event->GetPid(), event->GetTid(), event->GetCpu(),
-          event->GetCallchainSize(), event->tracepoint_size, event->GetPrevComm(),
-          event->GetPrevPid(), event->GetNextComm(), event->GetNextPid());
-      for (uint64_t i = 0; i < event->GetCallchainSize(); ++i) {
-        LOG("    %#016lx", event->GetCallchain()[i]);
-      }
-      LOG("");
-
+      event->SetOriginFileDescriptor(fd);
+      DeferEvent(std::move(event));
     }
 
   } else {

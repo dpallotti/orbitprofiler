@@ -57,6 +57,7 @@ class UprobesUnwindingVisitor : public PerfEventVisitor {
 
   void visit(StackSamplePerfEvent* event) override;
   void visit(CallchainSamplePerfEvent* event) override;
+  void visit(CallchainSchedSwitchPerfEvent* event) override;
   void visit(UprobesPerfEvent* event) override;
   void visit(UretprobesPerfEvent* event) override;
   void visit(MapsPerfEvent* event) override;
