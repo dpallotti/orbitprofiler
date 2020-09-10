@@ -150,4 +150,20 @@ int tracepoint_event_open(const char* tracepoint_category, const char* tracepoin
   return generic_event_open(&pe, pid, cpu);
 }
 
+int callchain_tracepoint_event_open(const char* tracepoint_category, const char* tracepoint_name,
+                                    pid_t pid, int32_t cpu) {
+  int tp_id = GetTracepointId(tracepoint_category, tracepoint_name);
+  if (tp_id == -1) {
+    return -1;
+  }
+  perf_event_attr pe = generic_event_attr();
+  pe.type = PERF_TYPE_TRACEPOINT;
+  pe.config = tp_id;
+  pe.sample_type |= PERF_SAMPLE_CALLCHAIN | PERF_SAMPLE_RAW;
+  pe.sample_max_stack = 127;
+  pe.exclude_callchain_kernel = true;
+
+  return generic_event_open(&pe, pid, cpu);
+}
+
 }  // namespace LinuxTracing

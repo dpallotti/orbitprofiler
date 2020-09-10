@@ -331,10 +331,12 @@ bool TracerThread::OpenRingBuffersForTracepoint(
     const char* tracepoint_category, const char* tracepoint_name, const std::vector<int32_t>& cpus,
     std::vector<int>* tracing_fds, absl::flat_hash_set<uint64_t>* tracepoint_ids,
     absl::flat_hash_map<int32_t, int>* tracepoint_ring_buffer_fds_per_cpu,
-    std::vector<PerfEventRingBuffer>* ring_buffers) {
+    std::vector<PerfEventRingBuffer>* ring_buffers,
+    const std::function<int(const char* tracepoint_category, const char* tracepoint_name, pid_t pid,
+                            int32_t cpu)>& perf_event_open_function) {
   absl::flat_hash_map<int32_t, int> tracepoint_fds_per_cpu;
   for (int32_t cpu : cpus) {
-    int fd = tracepoint_event_open(tracepoint_category, tracepoint_name, -1, cpu);
+    int fd = perf_event_open_function(tracepoint_category, tracepoint_name, -1, cpu);
     if (fd < 0) {
       ERROR("Opening %s:%s tracepoint for cpu %d", tracepoint_category, tracepoint_name, cpu);
       for (const auto& open_fd : tracepoint_fds_per_cpu) {
@@ -367,6 +369,10 @@ bool TracerThread::OpenTracepoints(const std::vector<int32_t>& cpus) {
   tracepoint_event_open_errors |=
       !OpenRingBuffersForTracepoint("task", "task_rename", cpus, &tracing_fds_, &task_rename_ids_,
                                     &tracepoint_ring_buffer_fds_per_cpu, &ring_buffers_);
+
+  tracepoint_event_open_errors |= !OpenRingBuffersForTracepoint(
+      "sched", "sched_switch", cpus, &tracing_fds_, &sched_switch_ids_,
+      &tracepoint_ring_buffer_fds_per_cpu, &ring_buffers_, &callchain_tracepoint_event_open);
 
   for (const auto& selected_tracepoint : instrumented_tracepoints_) {
     absl::flat_hash_set<uint64_t> stream_ids;
@@ -762,10 +768,12 @@ void TracerThread::ProcessSampleEvent(const perf_event_header& header,
   bool is_dma_fence_signaled_event = dma_fence_signaled_ids_.contains(stream_id);
   bool is_callchain_sample = callchain_sampling_ids_.contains(stream_id);
   bool is_user_instrumented_tracepoint = ids_to_tracepoint_info_.contains(stream_id);
+  bool is_sched_switch = sched_switch_ids_.contains(stream_id);
 
   CHECK(is_uprobe + is_uretprobe + is_stack_sample + is_task_newtask + is_task_rename +
             is_user_instrumented_tracepoint + is_amdgpu_cs_ioctl_event +
-            is_amdgpu_sched_run_job_event + is_dma_fence_signaled_event + is_callchain_sample <=
+            is_amdgpu_sched_run_job_event + is_dma_fence_signaled_event + is_callchain_sample +
+            is_sched_switch <=
         1);
 
   int fd = ring_buffer->GetFileDescriptor();
@@ -888,6 +896,24 @@ void TracerThread::ProcessSampleEvent(const perf_event_header& header,
     event->SetOriginFileDescriptor(fd);
     DeferEvent(std::move(event));
     ++stats_.sample_count;
+
+  } else if (is_sched_switch) {
+    auto event =
+        ConsumeCallchainTracepointPerfEvent<CallchainSchedSwitchPerfEvent>(ring_buffer, header);
+    if (event->GetPid() == pid_) {
+      LOG("sched_switch :: header.size: %d; timestamp: %lu, pid: %d, tid: %d, cpu: %u; "
+          "callchain_size: %lu; tracepoint_size: %d, prev_comm: %s, prev_pid: %d, next_comm: %s, "
+          "next_pid: %d; ",
+          header.size, event->GetTimestamp(), event->GetPid(), event->GetTid(), event->GetCpu(),
+          event->GetCallchainSize(), event->tracepoint_size, event->GetPrevComm(),
+          event->GetPrevPid(), event->GetNextComm(), event->GetNextPid());
+      for (uint64_t i = 0; i < event->GetCallchainSize(); ++i) {
+        LOG("    %#016lx", event->GetCallchain()[i]);
+      }
+      LOG("");
+
+    }
+
   } else {
     ERROR("PERF_EVENT_SAMPLE with unexpected stream_id: %lu", stream_id);
     ring_buffer->SkipRecord(header);
@@ -967,6 +993,7 @@ void TracerThread::Reset() {
   amdgpu_sched_run_job_ids_.clear();
   dma_fence_signaled_ids_.clear();
   callchain_sampling_ids_.clear();
+  sched_switch_ids_.clear();
 
   deferred_events_.clear();
   stop_deferred_thread_ = false;

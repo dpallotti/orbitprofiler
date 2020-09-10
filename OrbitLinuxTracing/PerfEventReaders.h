@@ -41,6 +41,36 @@ std::unique_ptr<T> ConsumeTracepointPerfEvent(PerfEventRingBuffer* ring_buffer,
   return event;
 }
 
+template <typename T,
+          typename = std::enable_if_t<std::is_base_of_v<CallchainTracepointPerfEvent, T>>>
+std::unique_ptr<T> ConsumeCallchainTracepointPerfEvent(PerfEventRingBuffer* ring_buffer,
+                                                       const perf_event_header& header) {
+  uint64_t nr;
+  ring_buffer->ReadValueAtOffset(&nr, offsetof(perf_event_callchain_sample_fixed, nr));
+
+  uint32_t tracepoint_size;
+  ring_buffer->ReadValueAtOffset(&tracepoint_size,
+                                 sizeof(perf_event_callchain_sample_fixed) + nr * sizeof(uint64_t));
+
+  auto event = std::make_unique<T>(nr, tracepoint_size);
+  event->ring_buffer_record.header = header;
+  ring_buffer->ReadValueAtOffset(&event->ring_buffer_record.sample_id,
+                                 offsetof(perf_event_callchain_sample_fixed, sample_id));
+
+  uint64_t callchain_size_in_bytes = nr * sizeof(uint64_t) / sizeof(char);
+  ring_buffer->ReadRawAtOffset(event->ips.get(),
+                               offsetof(perf_event_callchain_sample_fixed, nr) +
+                                   sizeof(perf_event_callchain_sample_fixed::nr),
+                               callchain_size_in_bytes);
+
+  ring_buffer->ReadRawAtOffset(
+      &event->tracepoint_data[0],
+      sizeof(perf_event_callchain_sample_fixed) + nr * sizeof(uint64_t) + sizeof(uint32_t),
+      tracepoint_size);
+  ring_buffer->SkipRecord(header);
+  return event;
+}
+
 }  // namespace LinuxTracing
 
 #endif  // ORBIT_LINUX_TRACING_PERF_EVENT_READERS_H_

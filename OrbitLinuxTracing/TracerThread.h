@@ -85,7 +85,10 @@ class TracerThread {
       const std::vector<int32_t>& cpus, std::vector<int>* tracing_fds,
       absl::flat_hash_set<uint64_t>* tracepoint_ids,
       absl::flat_hash_map<int32_t, int>* tracepoint_ring_buffer_fds_per_cpu,
-      std::vector<PerfEventRingBuffer>* ring_buffers);
+      std::vector<PerfEventRingBuffer>* ring_buffers,
+      const std::function<int(const char* tracepoint_category, const char* tracepoint_name,
+                              pid_t pid, int32_t cpu)>& perf_event_open_function =
+          &tracepoint_event_open);
   bool OpenTracepoints(const std::vector<int32_t>& cpus);
 
   bool InitGpuTracepointEventProcessor();
@@ -120,7 +123,7 @@ class TracerThread {
   static constexpr uint64_t UPROBES_RING_BUFFER_SIZE_KB = 8 * 1024;
   static constexpr uint64_t MMAP_TASK_RING_BUFFER_SIZE_KB = 64;
   static constexpr uint64_t SAMPLING_RING_BUFFER_SIZE_KB = 16 * 1024;
-  static constexpr uint64_t TRACEPOINTS_RING_BUFFER_SIZE_KB = 256;
+  static constexpr uint64_t TRACEPOINTS_RING_BUFFER_SIZE_KB = 16 * 1024; // 256;
   static constexpr uint64_t GPU_TRACING_RING_BUFFER_SIZE_KB = 256;
 
   static constexpr uint32_t IDLE_TIME_ON_EMPTY_RING_BUFFERS_US = 100;
@@ -151,6 +154,7 @@ class TracerThread {
   absl::flat_hash_set<uint64_t> dma_fence_signaled_ids_;
   absl::flat_hash_set<uint64_t> callchain_sampling_ids_;
   absl::flat_hash_map<uint64_t, orbit_grpc_protos::TracepointInfo> ids_to_tracepoint_info_;
+  absl::flat_hash_set<uint64_t> sched_switch_ids_;
 
   std::atomic<bool> stop_deferred_thread_ = false;
   std::vector<std::unique_ptr<PerfEvent>> deferred_events_;

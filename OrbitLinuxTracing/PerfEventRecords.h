@@ -112,6 +112,8 @@ struct __attribute__((__packed__)) perf_event_callchain_sample_fixed {
   // The rest of the sample is a uint64_t[nr] that we read dynamically.
 };
 
+static_assert(sizeof(perf_event_callchain_sample_fixed) == 48);
+
 struct __attribute__((__packed__)) perf_event_sp_ip_arguments_8bytes_sample {
   perf_event_header header;
   perf_event_sample_id_tid_time_streamid_cpu sample_id;

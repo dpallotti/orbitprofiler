@@ -476,6 +476,67 @@ class DmaFenceSignaledPerfEvent : public GpuPerfEvent {
   }
 };
 
+class CallchainTracepointPerfEvent : public PerfEvent {
+ public:
+  explicit CallchainTracepointPerfEvent(uint64_t callchain_size, uint32_t tracepoint_size)
+      : ips{make_unique_for_overwrite<uint64_t[]>(callchain_size)},
+        tracepoint_size{tracepoint_size},
+        tracepoint_data{make_unique_for_overwrite<uint8_t[]>(tracepoint_size)} {
+    ring_buffer_record.nr = callchain_size;
+  }
+
+  perf_event_callchain_sample_fixed ring_buffer_record;
+  std::unique_ptr<uint64_t[]> ips;
+  uint32_t tracepoint_size;
+  std::unique_ptr<uint8_t[]> tracepoint_data;
+
+  uint64_t GetTimestamp() const override { return ring_buffer_record.sample_id.time; }
+
+  pid_t GetPid() const { return ring_buffer_record.sample_id.pid; }
+  pid_t GetTid() const { return ring_buffer_record.sample_id.tid; }
+
+  uint64_t GetStreamId() const { return ring_buffer_record.sample_id.stream_id; }
+
+  uint32_t GetCpu() const { return ring_buffer_record.sample_id.cpu; }
+
+  uint64_t* GetCallchain() { return ips.get(); }
+  const uint64_t* GetCallchain() const { return ips.get(); }
+
+  uint64_t GetCallchainSize() const { return ring_buffer_record.nr; }
+
+  uint16_t GetTracepointId() const { return GetTracepointCommon().common_type; }
+
+ protected:
+  const tracepoint_common& GetTracepointCommon() const {
+    return *reinterpret_cast<const tracepoint_common*>(tracepoint_data.get());
+  }
+
+  template <typename TracepointData>
+  const TracepointData& GetTypedTracepointData() const {
+    return *reinterpret_cast<const TracepointData*>(tracepoint_data.get());
+  }
+};
+
+class CallchainSchedSwitchPerfEvent : public CallchainTracepointPerfEvent {
+ public:
+  CallchainSchedSwitchPerfEvent(uint64_t callchain_size, uint32_t tracepoint_size)
+      : CallchainTracepointPerfEvent{callchain_size, tracepoint_size} {}
+
+  void Accept(PerfEventVisitor* visitor) override;
+
+  const char* GetPrevComm() const {
+    return GetTypedTracepointData<sched_switch_tracepoint>().prev_comm;
+  }
+
+  pid_t GetPrevPid() const { return GetTypedTracepointData<sched_switch_tracepoint>().prev_pid; }
+
+  const char* GetNextComm() const {
+    return GetTypedTracepointData<sched_switch_tracepoint>().next_comm;
+  }
+
+  pid_t GetNextPid() const { return GetTypedTracepointData<sched_switch_tracepoint>().next_pid; }
+};
+
 }  // namespace LinuxTracing
 
 #endif  // ORBIT_LINUX_TRACING_PERF_EVENT_H_

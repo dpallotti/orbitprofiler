@@ -29,6 +29,7 @@ class PerfEventVisitor {
   virtual void visit(AmdgpuCsIoctlPerfEvent*) {}
   virtual void visit(AmdgpuSchedRunJobPerfEvent*) {}
   virtual void visit(DmaFenceSignaledPerfEvent*) {}
+  virtual void visit(CallchainSchedSwitchPerfEvent*) {}
 };
 
 }  // namespace LinuxTracing
