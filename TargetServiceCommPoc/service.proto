@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package my_service;
+
+import "google/protobuf/empty.proto";
+
+message Message {
+  string message = 1;
+}
+
+message Command {
+  message StartCommand {}
+  message StopCommand {}
+
+  oneof command {
+    StartCommand start_command = 1;
+    StopCommand stop_command = 2;
+  }
+}
+
+service MyService {
+  // Backchannel for commands back from the service.
+  rpc ReceiveCommands(google.protobuf.Empty) returns (stream Command) {}
+
+  rpc SendMessage(Message) returns (google.protobuf.Empty) {}
+}
