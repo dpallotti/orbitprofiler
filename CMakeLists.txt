@@ -159,6 +159,7 @@ add_subdirectory(OrbitFramePointerValidator)
 add_subdirectory(OrbitGrpcProtos)
 add_subdirectory(OrbitTest)
 add_subdirectory(OrbitVersion)
+add_subdirectory(TargetServiceCommPoc)
 
 if(WITH_ORBITGL)
   add_subdirectory(OrbitGl)
