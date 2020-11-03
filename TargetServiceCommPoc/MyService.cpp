@@ -32,7 +32,7 @@ class MyServiceImpl final : public my_service::MyService::Service {
                                const ::google::protobuf::Empty* /*request*/,
                                ::grpc::ServerWriter< ::my_service::Command>* writer) override {
     LOG("ReceiveCommands");
-    std::this_thread::sleep_for(std::chrono::seconds{15});
+    std::this_thread::sleep_for(std::chrono::seconds{10});
     while (!exit_requested) {
       my_service::Command command;
       command.mutable_start_command();
@@ -41,7 +41,7 @@ class MyServiceImpl final : public my_service::MyService::Service {
         return grpc::Status::OK;
       }
       LOG("writer->Write(command): StartCommand");
-      std::this_thread::sleep_for(std::chrono::seconds{15});
+      std::this_thread::sleep_for(std::chrono::seconds{10});
 
       command.mutable_stop_command();
       if (!writer->Write(command)) {
@@ -49,7 +49,7 @@ class MyServiceImpl final : public my_service::MyService::Service {
         return grpc::Status::OK;
       }
       LOG("writer->Write(command): StopCommand");
-      std::this_thread::sleep_for(std::chrono::seconds{15});
+      std::this_thread::sleep_for(std::chrono::seconds{20});
     }
     return grpc::Status::OK;
   }

@@ -147,37 +147,30 @@ void ForwarderMain() {
     }
   }};
 
+  constexpr uint64_t kMaxMessagesPerRequest = 75'000;
+  std::vector<Message> messages;
+  messages.resize(kMaxMessagesPerRequest);
   while (!exit_requested) {
-    Message message;
-
-    constexpr uint64_t kMaxMessagesPerRequest = 75'000;
-    my_service::BufferedMessages buffered_messages;
-    while (queue.try_dequeue(message)) {
-      my_service::Message proto_message;
-      proto_message.set_message(message.message.data());
-      buffered_messages.mutable_messages()->Add(std::move(proto_message));
-
-      if (buffered_messages.messages_size() == kMaxMessagesPerRequest) {
-        grpc::ClientContext send_message_context;
-        google::protobuf::Empty send_message_empty_response;
-        grpc::Status status = stub->SendMessages(&send_message_context, buffered_messages,
-                                                 &send_message_empty_response);
-        if (!status.ok()) {
-          ERROR("SendMessages: %s", status.error_message());
-        }
-        buffered_messages.Clear();
+    size_t dequeued_message_count;
+    while ((dequeued_message_count =
+                queue.try_dequeue_bulk(messages.begin(), kMaxMessagesPerRequest)) > 0) {
+      my_service::BufferedMessages buffered_messages;
+      for (size_t i = 0; i < dequeued_message_count; ++i) {
+        my_service::Message* proto_message = buffered_messages.mutable_messages()->Add();
+        proto_message->set_message(messages.at(i).message.data());
       }
-    }
 
-    if (buffered_messages.messages_size() > 0) {
       grpc::ClientContext send_message_context;
       google::protobuf::Empty send_message_empty_response;
       grpc::Status status = stub->SendMessages(&send_message_context, buffered_messages,
                                                &send_message_empty_response);
       if (!status.ok()) {
         ERROR("SendMessages: %s", status.error_message());
+        break;
       }
-      buffered_messages.Clear();
+      if (dequeued_message_count < kMaxMessagesPerRequest) {
+        break;
+      }
     }
 
     usleep(100);
