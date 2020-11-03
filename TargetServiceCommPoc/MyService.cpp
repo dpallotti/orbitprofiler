@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <csignal>
+#include <random>
 #include <thread>
 
 #include "OrbitBase/Logging.h"
@@ -31,7 +32,7 @@ class MyServiceImpl final : public my_service::MyService::Service {
                                const ::google::protobuf::Empty* /*request*/,
                                ::grpc::ServerWriter< ::my_service::Command>* writer) override {
     LOG("ReceiveCommands");
-    std::this_thread::sleep_for(std::chrono::seconds{1});
+    std::this_thread::sleep_for(std::chrono::seconds{15});
     while (!exit_requested) {
       my_service::Command command;
       command.mutable_start_command();
@@ -40,7 +41,7 @@ class MyServiceImpl final : public my_service::MyService::Service {
         return grpc::Status::OK;
       }
       LOG("writer->Write(command): StartCommand");
-      std::this_thread::sleep_for(std::chrono::seconds{3});
+      std::this_thread::sleep_for(std::chrono::seconds{15});
 
       command.mutable_stop_command();
       if (!writer->Write(command)) {
@@ -48,14 +49,16 @@ class MyServiceImpl final : public my_service::MyService::Service {
         return grpc::Status::OK;
       }
       LOG("writer->Write(command): StopCommand");
-      std::this_thread::sleep_for(std::chrono::seconds{5});
+      std::this_thread::sleep_for(std::chrono::seconds{15});
     }
     return grpc::Status::OK;
   }
 
-  grpc::Status SendMessage(::grpc::ServerContext* /*context*/, const ::my_service::Message* request,
-                           ::google::protobuf::Empty* /*response*/) override {
-    LOG("Received: %s", request->message());
+  grpc::Status SendMessages(::grpc::ServerContext* /*context*/,
+                            const ::my_service::BufferedMessages* request,
+                            ::google::protobuf::Empty* /*response*/) override {
+    LOG("Received %lu messages. First: %s", request->messages_size(),
+        request->messages(0).message());
     return grpc::Status::OK;
   }
 };

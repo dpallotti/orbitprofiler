@@ -4,10 +4,6 @@ package my_service;
 
 import "google/protobuf/empty.proto";
 
-message Message {
-  string message = 1;
-}
-
 message Command {
   message StartCommand {}
   message StopCommand {}
@@ -18,9 +14,17 @@ message Command {
   }
 }
 
+message Message {
+  string message = 1;
+}
+
+message BufferedMessages {
+  repeated Message messages = 1;
+}
+
 service MyService {
   // Backchannel for commands back from the service.
   rpc ReceiveCommands(google.protobuf.Empty) returns (stream Command) {}
 
-  rpc SendMessage(Message) returns (google.protobuf.Empty) {}
+  rpc SendMessages(BufferedMessages) returns (google.protobuf.Empty) {}
 }

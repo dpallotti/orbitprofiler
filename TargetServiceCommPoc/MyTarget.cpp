@@ -4,6 +4,7 @@
 #include <thread>
 
 #include "OrbitBase/Logging.h"
+#include "OrbitBase/SafeStrerror.h"
 #include "SocketPath.h"
 #include "concurrentqueue.h"
 #include "grpcpp/grpcpp.h"
@@ -27,31 +28,80 @@ static void InstallSigintHandler() {
 }
 
 struct Message {
-  std::array<char, 128> message;
+  static constexpr size_t kMaxMessageLength = 128;
+
+  std::array<char, kMaxMessageLength> message;
 };
 
 static moodycamel::ConcurrentQueue<Message> queue;
 
 static std::atomic<bool> write_data = false;
 
-void WriterMain(size_t index) {
-  size_t message_count = 0;
-  while (!exit_requested) {
+static size_t kN = 19;
+
+__attribute__((noinline)) void EveryMicro(size_t thread_index, size_t& message_count) {
+  double result = 0;
+  for (double i = 0; i < kN; ++i) {
+    // Complex enough to prevent clever optimizations with -O>=1.
+    result += sin(i) * cos(i) * tan(i) * exp(i);
+  }
+  {
     Message message;
-    snprintf(message.message.data(), 128, "message %lu from writer %lu", message_count, index);
+    snprintf(message.message.data(), Message::kMaxMessageLength, "message %lu from writer %lu: %f",
+             message_count, thread_index, result);
     if (write_data) {
       queue.enqueue(message);
     }
     ++message_count;
-    usleep(10'000);
+  }
+}
+
+void EverySecond(size_t thread_index, size_t& message_count) {
+  for (int i = 0; i < 1'000'000; ++i) {
+    EveryMicro(thread_index, message_count);
+  }
+}
+
+void WriterMain(size_t thread_index) {
+  {
+    cpu_set_t cpu_set{};
+    CPU_SET(thread_index, &cpu_set);
+    if (sched_setaffinity(0, sizeof(cpu_set_t), &cpu_set) != 0) {
+      ERROR("sched_setaffinity error: %s\n", SafeStrerror(errno));
+    }
+  }
+
+  std::vector<double> totals{};
+  size_t message_count = 0;
+  while (!exit_requested) {
+    auto start = std::chrono::steady_clock::now();
+    EverySecond(thread_index, message_count);
+    auto end = std::chrono::steady_clock::now();
+    double total_ms =
+        std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end - start).count();
+
+    totals.push_back(total_ms);
+    constexpr int kAvgWindowCount = 10;
+    double avg = 0;
+    size_t avg_window = totals.size() < kAvgWindowCount ? totals.size() : kAvgWindowCount;
+    for (size_t i = totals.size() - avg_window; i < totals.size(); ++i) {
+      avg += totals[i];
+    }
+    avg /= avg_window;
+
+    LOG("%1lu: %8.3f ms (avg last %2lu: %8.3f ms)", thread_index, total_ms, avg_window, avg);
   }
 }
 
 void ForwarderMain() {
   std::string server_address = absl::StrFormat("unix://%s", kSocketPath);
+  grpc::ChannelArguments channel_arguments;
   std::shared_ptr<grpc::Channel> channel = grpc::CreateCustomChannel(
-      server_address, grpc::InsecureChannelCredentials(), grpc::ChannelArguments());
-
+      server_address, grpc::InsecureChannelCredentials(), grpc::ChannelArguments{});
+  if (channel == nullptr) {
+    ERROR("channel == nullptr");
+    return;
+  }
   std::unique_ptr<my_service::MyService::Stub> stub = my_service::MyService::NewStub(channel);
   if (stub == nullptr) {
     ERROR("stub == nullptr");
@@ -99,24 +149,38 @@ void ForwarderMain() {
 
   while (!exit_requested) {
     Message message;
-    while (!exit_requested && queue.try_dequeue(message)) {
-      LOG("Read \"%s\"", message.message.data());
 
-      {
-        my_service::Message proto_message;
-        proto_message.set_message(message.message.data());
+    constexpr uint64_t kMaxMessagesPerRequest = 75'000;
+    my_service::BufferedMessages buffered_messages;
+    while (queue.try_dequeue(message)) {
+      my_service::Message proto_message;
+      proto_message.set_message(message.message.data());
+      buffered_messages.mutable_messages()->Add(std::move(proto_message));
+
+      if (buffered_messages.messages_size() == kMaxMessagesPerRequest) {
         grpc::ClientContext send_message_context;
         google::protobuf::Empty send_message_empty_response;
-        grpc::Status status =
-            stub->SendMessage(&send_message_context, proto_message, &send_message_empty_response);
+        grpc::Status status = stub->SendMessages(&send_message_context, buffered_messages,
+                                                 &send_message_empty_response);
         if (!status.ok()) {
-          ERROR("SendMessage: %s", status.error_message());
+          ERROR("SendMessages: %s", status.error_message());
         }
+        buffered_messages.Clear();
       }
     }
 
-    LOG("Sleep");
-    usleep(200'000);
+    if (buffered_messages.messages_size() > 0) {
+      grpc::ClientContext send_message_context;
+      google::protobuf::Empty send_message_empty_response;
+      grpc::Status status = stub->SendMessages(&send_message_context, buffered_messages,
+                                               &send_message_empty_response);
+      if (!status.ok()) {
+        ERROR("SendMessages: %s", status.error_message());
+      }
+      buffered_messages.Clear();
+    }
+
+    usleep(100);
   }
 
   if (cancellable_receive_commands_context.load() != nullptr) {
