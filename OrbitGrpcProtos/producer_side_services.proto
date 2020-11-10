@@ -1,0 +1,36 @@
+// Copyright (c) 2020 The Orbit Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto3";
+
+package orbit_grpc_protos;
+
+import "capture.proto";
+
+message SendCaptureEventsRequest {
+  repeated CaptureEvent capture_events = 1;
+}
+
+message SendCaptureEventsResponse {}
+
+message ReceiveCommandsRequest {}
+
+message ReceiveCommandsResponse {
+  message StartCaptureCommand {}
+  message StopCaptureCommand {}
+
+  oneof command {
+    StartCaptureCommand start_capture_command = 1;
+    StopCaptureCommand stop_capture_command = 2;
+  }
+}
+
+service ProducerSideService {
+  rpc SendCaptureEvents(SendCaptureEventsRequest)
+      returns (SendCaptureEventsResponse) {}
+
+  // Back-channel for commands back from the service.
+  rpc ReceiveCommands(ReceiveCommandsRequest)
+      returns (stream ReceiveCommandsResponse) {}
+}
