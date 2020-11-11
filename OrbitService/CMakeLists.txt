@@ -10,11 +10,15 @@ project(OrbitServiceLib)
 add_library(OrbitServiceLib STATIC)
 target_compile_options(OrbitServiceLib PRIVATE ${STRICT_COMPILE_FLAGS})
 
+target_sources(OrbitServiceLib PUBLIC
+        include/OrbitService/ProducerSideUnixDomainSocketPath.h)
+
 target_sources(OrbitServiceLib PRIVATE
         CaptureEventBuffer.h
         CaptureEventSender.h
         CaptureServiceImpl.cpp
         CaptureServiceImpl.h
+        CaptureStartStopListener.h
         CrashServiceImpl.cpp
         CrashServiceImpl.h
         FramePointerValidatorServiceImpl.cpp
@@ -31,6 +35,10 @@ target_sources(OrbitServiceLib PRIVATE
         ProcessList.h
         ProcessServiceImpl.cpp
         ProcessServiceImpl.h
+        ProducerSideServer.cpp
+        ProducerSideServer.h
+        ProducerSideServiceImpl.cpp
+        ProducerSideServiceImpl.h
         TracepointServiceImpl.h
         TracepointServiceImpl.cpp
         ServiceUtils.cpp
@@ -40,7 +48,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
   set_target_properties(OrbitServiceLib PROPERTIES COMPILE_FLAGS /wd4127)
 endif()
 
-target_include_directories(OrbitServiceLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(OrbitServiceLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+target_include_directories(OrbitServiceLib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(OrbitServiceLib PUBLIC
         ElfUtils
