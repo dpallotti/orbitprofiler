@@ -177,6 +177,10 @@ message AddressInfo {
   }
 }
 
+message GpuQueueSubmission {
+  string placeholder = 1;  // TODO
+}
+
 message CaptureEvent {
   oneof event {
     SchedulingSlice scheduling_slice = 1;
@@ -190,6 +194,7 @@ message CaptureEvent {
     AddressInfo address_info = 8;
     InternedTracepointInfo interned_tracepoint_info = 9;
     TracepointEvent tracepoint_event = 10;
+    GpuQueueSubmission gpu_queue_submission = 13;
     IntrospectionScope introspection_scope = 12;
   }
 }

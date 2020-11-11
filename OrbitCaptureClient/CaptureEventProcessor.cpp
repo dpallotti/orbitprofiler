@@ -65,6 +65,12 @@ void CaptureEventProcessor::ProcessEvent(const CaptureEvent& event) {
     case CaptureEvent::kTracepointEvent:
       ProcessTracepointEvent(event.tracepoint_event());
       break;
+    case CaptureEvent::kGpuQueueSubmission: {
+      if (rand() % 100000 == 0) {
+        LOG("Received GpuQueueSubmission: placeholder=%s",
+            event.gpu_queue_submission().placeholder());
+      }
+    } break;
     case CaptureEvent::EVENT_NOT_SET:
       ERROR("CaptureEvent::EVENT_NOT_SET read from Capture's gRPC stream");
       break;
