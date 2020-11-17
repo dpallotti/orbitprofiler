@@ -13,3 +13,11 @@ target_link_libraries(MyTarget PRIVATE
         OrbitProtos
         OrbitServiceLib
         concurrentqueue::concurrentqueue)
+
+project(MyTarget2)
+add_executable(MyTarget2
+        MyTarget2.cpp)
+target_compile_options(MyTarget2 PRIVATE ${STRICT_COMPILE_FLAGS})
+target_link_libraries(MyTarget2 PRIVATE
+        CaptureEventProducer
+        OrbitBase)
