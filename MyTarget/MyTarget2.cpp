@@ -11,6 +11,7 @@
 #include "OrbitBase/Logging.h"
 #include "OrbitBase/SafeStrerror.h"
 #include "OrbitService/ProducerSideUnixDomainSocketPath.h"
+#include <grpcpp/impl/grpc_library.h>
 
 static std::atomic<bool> exit_requested;
 
@@ -35,7 +36,38 @@ class Producer : public orbit_producer::LockFreeBufferCaptureEventProducer<Messa
         intermediate_event.message.data());
     return capture_event;
   }
-} producer;
+};
+
+grpc::internal::GrpcLibraryInitializer init;
+
+class ProducerHolder {
+ public:
+  ProducerHolder() {
+    producer_.emplace();
+    if (!producer_->BringUp(orbit_service::kProducerSideUnixDomainSocketPath)) {
+      producer_.reset();
+      ERROR("Bringing up VulkanLayerProducer");
+    }
+  }
+
+  virtual ~ProducerHolder() {
+    if (producer_.has_value()) {
+      producer_->TakeDown();
+    }
+  }
+
+  [[nodiscard]] bool HasProducer() { return producer_.has_value(); }
+
+  [[nodiscard]] Producer* GetProducer() {
+    if (!producer_.has_value()) {
+      return nullptr;
+    }
+    return &producer_.value();
+  }
+
+ private:
+  std::optional<Producer> producer_;
+} holder;
 
 static size_t kN = 19;
 
@@ -50,7 +82,7 @@ __attribute__((noinline)) void EveryMicro(size_t thread_index, size_t& message_c
     Message message;
     snprintf(message.message.data(), Message::kMaxMessageLength, "message %lu from writer %lu: %f",
              message_count, thread_index, result);
-    producer.EnqueueIntermediateEventIfCapturing([&message] { return message; });
+    holder.GetProducer()->EnqueueIntermediateEventIfCapturing([&message] { return message; });
     ++message_count;
   }
 }
@@ -101,12 +133,10 @@ int main() {
     writers.emplace_back(&WriterMain, i);
   }
 
-  bool brought_up = producer.BringUp(orbit_service::kProducerSideUnixDomainSocketPath);
-  if (brought_up) {
+  if (holder.HasProducer()) {
     while (!exit_requested) {
       std::this_thread::sleep_for(std::chrono::seconds{1});
     }
-    producer.TakeDown();
   }
 
   for (std::thread& writer : writers) {
