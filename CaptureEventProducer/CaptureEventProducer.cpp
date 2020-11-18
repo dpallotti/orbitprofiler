@@ -151,6 +151,9 @@ void CaptureEventProducer::ReceiveCommandsThread() {
       }
 
       switch (receive_commands_response.command_case()) {
+        case ReceiveCommandsResponse::kCheckAliveCommand: {
+          LOG("CaptureEventProducer received CheckAliveCommand");
+        } break;
         case ReceiveCommandsResponse::kStartCaptureCommand: {
           LOG("CaptureEventProducer received StartCaptureCommand");
           if (!is_capturing_) {

@@ -38,6 +38,7 @@ grpc::Status ProducerSideServiceImpl::ReceiveCommands(
     status_mutex_.Lock();
     if (status_ == ProducerSideServiceStatus::kExitRequested) {
       status_mutex_.Unlock();
+      LOG("Terminating gRPC call to ReceiveCommands as exit was requested");
       return grpc::Status::OK;
     }
 
@@ -66,6 +67,7 @@ grpc::Status ProducerSideServiceImpl::ReceiveCommands(
       continue;
     }
 
+    constexpr absl::Duration kCheckAliveCommandDelay = absl::Seconds(5);
     if (status_ == ProducerSideServiceStatus::kCaptureStopped) {
       status_mutex_.AwaitWithTimeout(absl::Condition(
                                          +[](ProducerSideServiceStatus* status) {
@@ -73,7 +75,7 @@ grpc::Status ProducerSideServiceImpl::ReceiveCommands(
                                                   ProducerSideServiceStatus::kCaptureStopped;
                                          },
                                          &status_),
-                                     absl::Seconds(1));
+                                     kCheckAliveCommandDelay);
       status_mutex_.Unlock();
     } else if (status_ == ProducerSideServiceStatus::kCaptureStarted) {
       status_mutex_.AwaitWithTimeout(absl::Condition(
@@ -82,8 +84,18 @@ grpc::Status ProducerSideServiceImpl::ReceiveCommands(
                                                   ProducerSideServiceStatus::kCaptureStarted;
                                          },
                                          &status_),
-                                     absl::Seconds(1));
+                                     kCheckAliveCommandDelay);
       status_mutex_.Unlock();
+    }
+
+    {
+      orbit_grpc_protos::ReceiveCommandsResponse command;
+      command.mutable_check_alive_command();
+      if (!writer->Write(command)) {
+        ERROR("Sending CheckAliveCommand to producer");
+        return grpc::Status::CANCELLED;
+      }
+      LOG("Sent CheckAliveCommand to producer");
     }
   }
 }

@@ -17,12 +17,14 @@ message SendCaptureEventsResponse {}
 message ReceiveCommandsRequest {}
 
 message ReceiveCommandsResponse {
+  message CheckAliveCommand {}
   message StartCaptureCommand {}
   message StopCaptureCommand {}
 
   oneof command {
-    StartCaptureCommand start_capture_command = 1;
-    StopCaptureCommand stop_capture_command = 2;
+    CheckAliveCommand check_alive_command = 1;
+    StartCaptureCommand start_capture_command = 2;
+    StopCaptureCommand stop_capture_command = 3;
   }
 }
 
