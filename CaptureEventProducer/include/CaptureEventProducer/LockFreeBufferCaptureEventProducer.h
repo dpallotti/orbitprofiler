@@ -32,6 +32,14 @@ class LockFreeBufferCaptureEventProducer : public CaptureEventProducer {
     CaptureEventProducer::ShutdownAndWait();
   }
 
+  void EnqueueIntermediateEvent(const IntermediateEventT& event) {
+    lock_free_queue_.enqueue(event);
+  }
+
+  void EnqueueIntermediateEvent(IntermediateEventT&& event) {
+    lock_free_queue_.enqueue(std::move(event));
+  }
+
   void EnqueueIntermediateEventIfCapturing(
       const std::function<IntermediateEventT()>& event_builder_if_capturing) {
     if (IsCapturing()) {
