@@ -43,6 +43,7 @@ grpc::internal::GrpcLibraryInitializer init;
 class ProducerHolder {
  public:
   ProducerHolder() {
+    LOG("ProducerHolder()");
     producer_.emplace();
     if (!producer_->BringUp(orbit_service::kProducerSideUnixDomainSocketPath)) {
       producer_.reset();
@@ -51,6 +52,7 @@ class ProducerHolder {
   }
 
   virtual ~ProducerHolder() {
+    LOG("~ProducerHolder()");
     if (producer_.has_value()) {
       producer_->TakeDown();
     }
@@ -67,7 +69,12 @@ class ProducerHolder {
 
  private:
   std::optional<Producer> producer_;
-} holder;
+};
+
+static ProducerHolder* GetHolder() {
+  static ProducerHolder holder;
+  return &holder;
+}
 
 static size_t kN = 19;
 
@@ -82,7 +89,7 @@ __attribute__((noinline)) void EveryMicro(size_t thread_index, size_t& message_c
     Message message;
     snprintf(message.message.data(), Message::kMaxMessageLength, "message %lu from writer %lu: %f",
              message_count, thread_index, result);
-    holder.GetProducer()->EnqueueIntermediateEventIfCapturing([&message] { return message; });
+    GetHolder()->GetProducer()->EnqueueIntermediateEventIfCapturing([&message] { return message; });
     ++message_count;
   }
 }
@@ -133,7 +140,7 @@ int main() {
     writers.emplace_back(&WriterMain, i);
   }
 
-  if (holder.HasProducer()) {
+  if (GetHolder()->HasProducer()) {
     while (!exit_requested) {
       std::this_thread::sleep_for(std::chrono::seconds{1});
     }
