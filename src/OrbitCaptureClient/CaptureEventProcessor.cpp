@@ -79,6 +79,22 @@ void CaptureEventProcessor::ProcessEvent(const ClientCaptureEvent& event) {
     case ClientCaptureEvent::kModuleUpdateEvent:
       // TODO (http://b/168797897): Process module update events
       break;
+    case ClientCaptureEvent::kFixedFakeEvent: {
+      static constexpr uint64_t kPrintFixedFakeEventsReceivedEvery = 1000000;
+      static uint64_t fixed_fake_events_received = 0;
+      ++fixed_fake_events_received;
+      if (fixed_fake_events_received % kPrintFixedFakeEventsReceivedEvery == 0) {
+        LOG("Received %lu FixedFakeEvents", kPrintFixedFakeEventsReceivedEvery);
+      }
+    } break;
+    case ClientCaptureEvent::kBytesFakeEvent: {
+      static constexpr uint64_t kPrintBytesFakeEventsReceivedEvery = 1000000;
+      static uint64_t bytes_fake_events_received = 0;
+      ++bytes_fake_events_received;
+      if (bytes_fake_events_received % kPrintBytesFakeEventsReceivedEvery == 0) {
+        LOG("Received %lu BytesFakeEvents", kPrintBytesFakeEventsReceivedEvery);
+      }
+    } break;
     case ClientCaptureEvent::EVENT_NOT_SET:
       ERROR("CaptureEvent::EVENT_NOT_SET read from Capture's gRPC stream");
       break;

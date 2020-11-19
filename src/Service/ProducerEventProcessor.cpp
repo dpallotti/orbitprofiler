@@ -354,6 +354,16 @@ void ProducerEventProcessorImpl::ProcessEvent(uint64_t producer_id, ProducerCapt
     case ProducerCaptureEvent::kModuleUpdateEvent:
       ProcessModuleUpdateEvent(event.mutable_module_update_event());
       break;
+    case ProducerCaptureEvent::kFixedFakeEvent: {
+      ClientCaptureEvent client_event;
+      *event.mutable_fixed_fake_event() = std::move(*event.mutable_fixed_fake_event());
+      capture_event_buffer_->AddEvent(std::move(client_event));
+    } break;
+    case ProducerCaptureEvent::kBytesFakeEvent: {
+      ClientCaptureEvent client_event;
+      *event.mutable_bytes_fake_event() = std::move(*event.mutable_bytes_fake_event());
+      capture_event_buffer_->AddEvent(std::move(client_event));
+    } break;
     case ProducerCaptureEvent::EVENT_NOT_SET:
       UNREACHABLE();
   }

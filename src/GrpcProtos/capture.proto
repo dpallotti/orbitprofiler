@@ -269,6 +269,19 @@ message ModuleUpdateEvent {
   ModuleInfo module = 3;
 }
 
+message FixedFakeEvent {
+  fixed64 field1 = 1;
+  fixed64 field2 = 2;
+  fixed64 field3 = 3;
+  fixed64 field4 = 4;
+  fixed64 field5 = 5;
+  fixed64 field6 = 6;
+}
+
+message BytesFakeEvent {
+  bytes bytes = 1;
+}
+
 message ClientCaptureEvent {
   oneof event {
     // Please keep these alphabetically ordered.
@@ -286,6 +299,9 @@ message ClientCaptureEvent {
     ThreadName thread_name = 12;
     ThreadStateSlice thread_state_slice = 13;
     TracepointEvent tracepoint_event = 14;
+
+    FixedFakeEvent fixed_fake_event = 16;
+    BytesFakeEvent bytes_fake_event = 17;
   }
 }
 
@@ -306,5 +322,8 @@ message ProducerCaptureEvent {
     SchedulingSlice scheduling_slice = 12;
     ThreadName thread_name = 13;
     ThreadStateSlice thread_state_slice = 14;
+
+    FixedFakeEvent fixed_fake_event = 16;
+    BytesFakeEvent bytes_fake_event = 17;
   }
 }

@@ -26,6 +26,7 @@ bool ProducerSideServer::BuildAndStart(std::string_view unix_domain_socket_path)
   builder.AddListeningPort(absl::StrFormat("unix:%s", unix_domain_socket_path),
                            grpc::InsecureServerCredentials());
 
+  producer_side_service_.SetMaxWaitForAllCaptureEventsMs(2000);
   builder.RegisterService(&producer_side_service_);
 
   server_ = builder.BuildAndStart();

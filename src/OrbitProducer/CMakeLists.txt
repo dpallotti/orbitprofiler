@@ -39,3 +39,12 @@ target_link_libraries(OrbitProducerTests PRIVATE
         GTest::Main)
 
 register_test(OrbitProducerTests)
+
+project(MyTarget)
+add_executable(MyTarget
+        MyTarget.cpp)
+target_compile_options(MyTarget PRIVATE ${STRICT_COMPILE_FLAGS})
+target_link_libraries(MyTarget PRIVATE
+        OrbitBase
+        OrbitProducer
+        ProducerSideChannel)
