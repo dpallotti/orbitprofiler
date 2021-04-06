@@ -11,6 +11,7 @@
 #include <thread>
 
 #include "OrbitBase/Logging.h"
+#include "OrbitBase/WriteStringToFile.h"
 #include "frag_spv.h"
 #include "vert_spv.h"
 
@@ -230,24 +231,30 @@ class VulkanTutorial {
         .mipLevels = 1,
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        //        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .tiling = VK_IMAGE_TILING_LINEAR,
         .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
     image_extent_ = create_info.extent;
 
-    for (int format_int = VK_FORMAT_BEGIN_RANGE; format_int <= VK_FORMAT_END_RANGE; ++format_int) {
-      const auto format = static_cast<VkFormat>(format_int);
+    if (false) {
+      for (int format_int = VK_FORMAT_BEGIN_RANGE; format_int <= VK_FORMAT_END_RANGE;
+           ++format_int) {
+        const auto format = static_cast<VkFormat>(format_int);
 
-      VkImageFormatProperties format_properties{};
-      VkResult result = vkGetPhysicalDeviceImageFormatProperties(
-          physical_device_, format, create_info.imageType, create_info.tiling, create_info.usage,
-          create_info.flags, &format_properties);
-      if (result == VK_SUCCESS) {
-        image_format_ = format;
-        break;
+        VkImageFormatProperties format_properties{};
+        VkResult result = vkGetPhysicalDeviceImageFormatProperties(
+            physical_device_, format, create_info.imageType, create_info.tiling, create_info.usage,
+            create_info.flags, &format_properties);
+        if (result == VK_SUCCESS) {
+          image_format_ = format;
+          break;
+        }
       }
+    } else {
+      image_format_ = VK_FORMAT_R8G8B8A8_UNORM;
     }
 
     CHECK(image_format_ != VkFormat::VK_FORMAT_UNDEFINED);
@@ -261,6 +268,7 @@ class VulkanTutorial {
     VkMemoryRequirements memory_requirements{};
     vkGetImageMemoryRequirements(device_, image_, &memory_requirements);
     CHECK(memory_requirements.memoryTypeBits != 0);
+    LOG("memory_requirements.memoryTypeBits: %#lx", memory_requirements.memoryTypeBits);
 
     // "memoryTypeBits is a bitmask and contains one bit set for every supported memory type for the
     // resource. Bit i is set if and only if the memory type i in the
@@ -268,7 +276,22 @@ class VulkanTutorial {
     // resource."
     VkPhysicalDeviceMemoryProperties memory_properties{};
     vkGetPhysicalDeviceMemoryProperties(physical_device_, &memory_properties);
-    uint32_t memory_type_index = __builtin_ctz(memory_requirements.memoryTypeBits);
+    //    uint32_t memory_type_index = __builtin_ctz(memory_requirements.memoryTypeBits);
+    uint32_t memory_type_index = -1;
+    for (uint32_t i = 0; i < memory_properties.memoryTypeCount; ++i) {
+      const auto required_properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+      if ((memory_requirements.memoryTypeBits & (1 << i)) != 0) {
+        LOG("memoryTypeBits: %d", i);
+        LOG("memory_properties.memoryTypes[i].propertyFlags: %#lx",
+            memory_properties.memoryTypes[i].propertyFlags);
+      }
+      if ((memory_requirements.memoryTypeBits & (1 << i)) != 0 &&
+          (memory_properties.memoryTypes[i].propertyFlags & required_properties) ==
+              required_properties) {
+        memory_type_index = i;
+        break;
+      }
+    }
     LOG("memory_type_index=%d", memory_type_index);
     CHECK(memory_type_index < memory_properties.memoryTypeCount);
 
@@ -562,6 +585,8 @@ class VulkanTutorial {
     vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX);
     vkResetFences(device_, 1, &fence_);
 
+    SaveScreenshot();
+
     VkSubmitInfo submit_info{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 0,
@@ -573,6 +598,41 @@ class VulkanTutorial {
         .pSignalSemaphores = nullptr,
     };
     CHECK_VK(vkQueueSubmit(graphics_queue_, 1, &submit_info, fence_));
+  }
+
+  // Refer to https://github.com/SaschaWillems/Vulkan/blob/master/examples/screenshot/screenshot.cpp
+  void SaveScreenshot() {
+    VkImageSubresource subresource{
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .mipLevel = 0,
+        .arrayLayer = 0,
+    };
+    VkSubresourceLayout subresource_layout;
+    vkGetImageSubresourceLayout(device_, image_, &subresource, &subresource_layout);
+
+    char* data;
+    CHECK_VK(vkMapMemory(device_, memory_, 0, VK_WHOLE_SIZE, 0, reinterpret_cast<void**>(&data)));
+    data += subresource_layout.offset;
+
+    std::string output;
+    output.append("P6\n")
+        .append(absl::StrFormat("%d\n", image_extent_.width))
+        .append(absl::StrFormat("%d\n", image_extent_.height))
+        .append("255\n");
+    for (uint32_t y = 0; y < image_extent_.height; ++y) {
+      uint32_t* row = reinterpret_cast<uint32_t*>(data);
+      for (uint32_t x = 0; x < image_extent_.width; ++x) {
+        // Change to RGB.
+        output.push_back(reinterpret_cast<char*>(row)[2]);
+        output.push_back(reinterpret_cast<char*>(row)[1]);
+        output.push_back(reinterpret_cast<char*>(row)[0]);
+        ++row;
+      }
+      data += subresource_layout.rowPitch;
+    }
+    CHECK(orbit_base::WriteStringToFile("screenshot.ppm", output).has_value());
+
+    vkUnmapMemory(device_, memory_);
   }
 
  private:
